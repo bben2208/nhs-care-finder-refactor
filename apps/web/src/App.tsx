@@ -11,6 +11,8 @@ import SearchForm from "./components/SearchForm";
 import Tabs from "./components/Tabs";
 import BigMap from "./components/BigMap";
 import ResultList from "./components/ResultList";
+import Chatbot from "./components/Chatbot";
+
 
 export default function App() {
   const [searchParams] = useSearchParams();
@@ -60,6 +62,7 @@ export default function App() {
   const filteredSorted = useFiltersAndSort(results, filters, sortBy, isFav);
 
   return (
+    
     <Layout dark={dark} toggleDark={() => setDark(d => !d)} fg={fg} border={border} bg={bg}>
       <SearchForm
         postcode={postcode} setPostcode={setPostcode}
@@ -96,6 +99,7 @@ export default function App() {
       <p style={{ fontSize: 12, color: sub, marginTop: 20 }}>
         Info only — not medical advice. In emergencies call 999. For advice use NHS 111 online.
       </p>
+      <Chatbot border={border} card={card} fg={fg} sub={sub} />
     </Layout>
   );
 }
