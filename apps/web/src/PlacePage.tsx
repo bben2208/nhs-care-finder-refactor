@@ -1,26 +1,28 @@
 import { Link, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
-import axios from "axios";
+import { api } from "./lib/api";
 
+type Window = { open: string; close: string };
 type Opening = {
-  day: string;
-  opens: string | null;
-  closes: string | null;
+  mon: Window[]; tue: Window[]; wed: Window[];
+  thu: Window[]; fri: Window[]; sat: Window[]; sun: Window[];
 };
 
 type Place = {
   id: string;
   name: string;
-  type: string;
-  address: string;
+  type: "gp" | "walk-in" | "utc" | "ae";
+  address?: string;
   phone?: string;
   website?: string;
-  location?: {
-    lat: number;
-    lng: number;
-  };
-  features?: string[];
-  openingHours?: Opening[];
+  location: { lat: number; lon: number };
+  features?: { xray?: boolean; wheelchair?: boolean; parking?: boolean };
+  opening: Opening;
+};
+
+const dayOrder: (keyof Opening)[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const dayLabel: Record<keyof Opening, string> = {
+  mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun",
 };
 
 export default function PlacePage() {
@@ -30,22 +32,23 @@ export default function PlacePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!id) return;
     setLoading(true);
     setError(null);
-    axios
-      .get(`/api/places/${id}`)
-      .then((res) => {
-        setPlace(res.data);
-        setLoading(false);
-      })
-      .catch((err) => {
+    (async () => {
+      try {
+        const { data } = await api.get(`/places/${id}`);
+        setPlace(data as Place);
+      } catch (err: any) {
         setError(
-          err.response?.data?.error ||
-            err.message ||
-            "An error occurred fetching place details."
+          err?.response?.data?.error ||
+          err?.message ||
+          "An error occurred fetching place details."
         );
+      } finally {
         setLoading(false);
-      });
+      }
+    })();
   }, [id]);
 
   return (
@@ -53,21 +56,28 @@ export default function PlacePage() {
       <div style={{ marginBottom: 12 }}>
         <Link to="/" style={{ textDecoration: "none" }}>← Back</Link>
       </div>
+
       {loading && <p>Loading...</p>}
+
       {error && (
         <div style={{ color: "red", marginBottom: 16 }}>
           <strong>Error:</strong> {error}
         </div>
       )}
+
       {!loading && !error && place && (
         <>
           <h1 style={{ marginBottom: 0 }}>{place.name}</h1>
-          <div style={{ color: "#666", marginBottom: 12 }}>{place.type}</div>
+          <div style={{ color: "#666", marginBottom: 12 }}>{place.type.toUpperCase()}</div>
+
+          {/* Contact / actions */}
           <div style={{ marginBottom: 10 }}>
-            <div>
-              <strong>Address:</strong>
-              <div style={{ marginLeft: 8, display: "inline" }}>{place.address}</div>
-            </div>
+            {place.address && (
+              <div>
+                <strong>Address:</strong>{" "}
+                <span style={{ marginLeft: 8 }}>{place.address}</span>
+              </div>
+            )}
             {place.phone && (
               <div>
                 <strong>Phone:</strong>{" "}
@@ -79,7 +89,12 @@ export default function PlacePage() {
             {place.website && (
               <div>
                 <strong>Website:</strong>{" "}
-                <a href={place.website} target="_blank" rel="noopener noreferrer" style={{ color: "#0066cc" }}>
+                <a
+                  href={place.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: "#0066cc" }}
+                >
                   {place.website}
                 </a>
               </div>
@@ -88,7 +103,7 @@ export default function PlacePage() {
               <div>
                 <strong>Map:</strong>{" "}
                 <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${place.location.lat},${place.location.lng}`}
+                  href={`https://www.google.com/maps/search/?api=1&query=${place.location.lat},${place.location.lon}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: "#0066cc" }}
@@ -98,53 +113,72 @@ export default function PlacePage() {
               </div>
             )}
           </div>
-          {place.features && place.features.length > 0 && (
+
+          {/* Features */}
+          {place.features && (
             <div style={{ marginBottom: 18 }}>
               <strong>Features:</strong>
-              <div style={{ marginTop: 4, display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {place.features.map((feature) => (
-                  <span
-                    key={feature}
-                    style={{
-                      background: "#e7f1ff",
-                      color: "#2456a8",
-                      borderRadius: 12,
-                      padding: "4px 12px",
-                      fontSize: 13,
-                      fontWeight: 500,
-                      letterSpacing: 0.2,
-                    }}
-                  >
-                    {feature}
-                  </span>
-                ))}
+              <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {"wheelchair" in place.features && (
+                  <Badge label="Wheelchair" on={!!place.features.wheelchair} />
+                )}
+                {"parking" in place.features && (
+                  <Badge label="Parking" on={!!place.features.parking} />
+                )}
+                {"xray" in place.features && (
+                  <Badge label="X-ray" on={!!place.features.xray} />
+                )}
               </div>
             </div>
           )}
-          {place.openingHours && place.openingHours.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <strong>Opening Hours:</strong>
-              <table style={{ width: "100%", marginTop: 6, borderCollapse: "collapse" }}>
-                <tbody>
-                  {place.openingHours.map((o) => (
-                    <tr key={o.day}>
-                      <td style={{ padding: "4px 8px", fontWeight: 500 }}>{o.day}</td>
-                      <td style={{ padding: "4px 8px" }}>
-                        {o.opens && o.closes
-                          ? `${o.opens} – ${o.closes}`
-                          : "Closed"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+
+          {/* Opening hours */}
+          <div style={{ marginBottom: 16 }}>
+            <strong>Opening Hours:</strong>
+            <table style={{ width: "100%", marginTop: 6, borderCollapse: "collapse" }}>
+              <tbody>
+                {dayOrder.map((d) => (
+                  <tr key={d}>
+                    <td style={{ padding: "4px 8px", fontWeight: 500, width: 70 }}>
+                      {dayLabel[d]}
+                    </td>
+                    <td style={{ padding: "4px 8px" }}>
+                      {place.opening[d].length === 0
+                        ? "Closed"
+                        : place.opening[d].map((w, i) => (
+                            <span key={`${d}-${i}`} style={{ marginRight: 8 }}>
+                              {w.open} – {w.close}
+                            </span>
+                          ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
           <div style={{ marginTop: 32, color: "#888", fontSize: 13 }}>
             Information provided as a guide only. Please check with the place for latest details.
           </div>
         </>
       )}
     </div>
+  );
+}
+
+function Badge({ label, on }: { label: string; on: boolean }) {
+  return (
+    <span
+      style={{
+        background: on ? "#e6ffed" : "#f1f5f9",
+        color: on ? "#166534" : "#475569",
+        border: `1px solid ${on ? "#16a34a" : "#cbd5e1"}`,
+        borderRadius: 999,
+        padding: "4px 10px",
+        fontSize: 12,
+      }}
+    >
+      {label}{on ? "" : " (n/a)"}
+    </span>
   );
 }
