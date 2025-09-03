@@ -1,6 +1,6 @@
 // apps/web/src/components/Chatbot.tsx
-import { useMemo, useState } from "react";
 import { useTriage } from "../hooks/useTriage";
+import { useState } from "react";
 
 type Props = {
   border: string;
@@ -59,7 +59,7 @@ export default function Chatbot({ border, card, fg, sub, accent = "#0b6" }: Prop
             )}
           </div>
 
-          <Footer reset={reset} hasOutcome={!!outcome} sub={sub} />
+          <Footer reset={reset} hasOutcome={!!outcome} />
         </div>
       )}
     </>
@@ -74,9 +74,7 @@ function Header({ sub }: { sub: string }) {
     </div>
   );
 }
-
-function Footer({ reset, hasOutcome, sub }: { reset: () => void; hasOutcome: boolean; sub: string }) {
-  return (
+function Footer({ reset, hasOutcome }: { reset: () => void; hasOutcome: boolean }) {  return (
     <div style={{ padding: "8px 12px", borderTop: "1px solid rgba(0,0,0,.06)", display: "flex", gap: 8, justifyContent: "space-between" }}>
       <a href="https://111.nhs.uk/" target="_blank" rel="noreferrer" style={{ fontSize: 13 }}>NHS 111 online</a>
       <div style={{ display: "flex", gap: 8 }}>

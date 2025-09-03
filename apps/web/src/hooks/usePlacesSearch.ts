@@ -24,7 +24,7 @@ export type Place = {
 };
 
 export function usePlacesSearch() {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<Place[]>([]);
   const [error, setError] = useState<string>("");
