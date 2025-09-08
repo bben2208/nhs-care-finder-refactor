@@ -8,6 +8,7 @@ const app = express();
 app.use(helmet());
 app.use(express.json());
 app.use(cors({ origin: process.env.WEB_ORIGIN || false }));
+app.use(cors({ origin: true }));  // TEMP: reflect request origin
 
 app.get("/", (_req: Request, res: Response) =>
   res.json({ ok: true, name: "nhs-care-finder-api" })
