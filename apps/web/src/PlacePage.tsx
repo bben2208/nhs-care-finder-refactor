@@ -37,7 +37,7 @@ export default function PlacePage() {
     setError(null);
     (async () => {
       try {
-        const { data } = await api.get(`/places/${id}`);
+        const { data } = await apiGetWithFallback(`/places/${id}`);
         setPlace(data as Place);
       } catch (err: any) {
         setError(

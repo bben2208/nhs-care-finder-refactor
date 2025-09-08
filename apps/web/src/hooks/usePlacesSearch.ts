@@ -39,8 +39,7 @@ export function usePlacesSearch() {
         params.set("radius", String(radiusKm));
         if (type) params.set("type", type);
 
-        const { data } = await api.get(`/places?${params.toString()}`);
-        setResults(data.results);
+        const { data } = await apiGetWithFallback("/places", params.toString());       
         setExpandedId(data.results?.[0]?.id ?? null);
 
         const next: Record<string, string> = { postcode, radius: String(radiusKm) };
