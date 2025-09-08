@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api } from "../lib/api";
-
+import { apiGetWithFallback } from "../lib/api";
 export type OpeningWindow = { open: string; close: string };
 export type Opening = {
   mon: OpeningWindow[]; tue: OpeningWindow[]; wed: OpeningWindow[];

@@ -1,7 +1,7 @@
+//PlacePage.tsx
 import { Link, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { api } from "./lib/api";
-
+import { apiGetWithFallback } from "./lib/api";
 type Window = { open: string; close: string };
 type Opening = {
   mon: Window[]; tue: Window[]; wed: Window[];
