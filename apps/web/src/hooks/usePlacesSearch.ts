@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { apiGetWithFallback } from "../lib/api";
+
 export type OpeningWindow = { open: string; close: string };
 export type Opening = {
   mon: OpeningWindow[]; tue: OpeningWindow[]; wed: OpeningWindow[];
@@ -38,14 +39,15 @@ export function usePlacesSearch() {
         params.set("radius", String(radiusKm));
         if (type) params.set("type", type);
 
-        const { data } = await apiGetWithFallback("/places", params.toString());       
+        const { data } = await apiGetWithFallback("/places", params.toString());
+        setResults(data.results);
         setExpandedId(data.results?.[0]?.id ?? null);
 
         const next: Record<string, string> = { postcode, radius: String(radiusKm) };
         if (type) next.type = type;
         setSearchParams(next, { replace: false });
       } catch (e: any) {
-        setError(e?.response?.data?.error || "Search failed");
+        setError(e?.response?.data?.error || e?.message || "Search failed");
       } finally {
         setLoading(false);
       }
@@ -63,7 +65,7 @@ export function usePlacesSearch() {
         params.set("radius", String(radiusKm));
         if (type) params.set("type", type);
 
-        const { data } = await api.get(`/places?${params.toString()}`);
+        const { data } = await apiGetWithFallback("/places", params.toString());
         setResults(data.results);
         setExpandedId(data.results?.[0]?.id ?? null);
 
@@ -75,7 +77,7 @@ export function usePlacesSearch() {
         if (type) next.type = type;
         setSearchParams(next, { replace: false });
       } catch (e: any) {
-        setError(e?.response?.data?.error || "Search failed");
+        setError(e?.response?.data?.error || e?.message || "Search failed");
       } finally {
         setLoading(false);
       }
