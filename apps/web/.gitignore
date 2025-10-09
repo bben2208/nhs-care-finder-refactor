@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# prevent compiled twins from being committed again
+src/**/*.js
+src/**/*.js.map
