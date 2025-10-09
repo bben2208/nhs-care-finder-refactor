@@ -15,7 +15,6 @@ type Props = {
   loading: boolean;
   onSearch: (e: React.FormEvent) => void;
   useMyLocation: () => void;
-  // simple theme tokens from parent
   border: string; card: string; fg: string; sub: string; dark: boolean;
 };
 
@@ -43,9 +42,7 @@ export default function SearchForm({
         >
           Use my location
         </button>
-        <small style={{ alignSelf: "center", color: sub }}>
-          (Requires location permission)
-        </small>
+        <small style={{ alignSelf: "center", color: sub }}>(Requires location permission)</small>
       </div>
 
       <div style={{ display: "grid", gap: 8 }}>
@@ -62,7 +59,6 @@ export default function SearchForm({
           <option value="ae">A&amp;E</option>
         </select>
 
-        {/* Filters */}
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", color: sub }}>
           <label><input type="checkbox" checked={filters.open} onChange={e => setFilters({ ...filters, open: e.target.checked })}/> Open now</label>
           <label><input type="checkbox" checked={filters.wheelchair} onChange={e => setFilters({ ...filters, wheelchair: e.target.checked })}/> Wheelchair</label>
@@ -71,7 +67,6 @@ export default function SearchForm({
           <label><input type="checkbox" checked={filters.fav} onChange={e => setFilters({ ...filters, fav: e.target.checked })}/> Favourites</label>
         </div>
 
-        {/* Sort */}
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <label style={{ color: sub }}>Sort by</label>
           <select value={sortBy} onChange={e => setSortBy(e.target.value as SortKey)} style={{ padding: 8, borderRadius: 8, border: `1px solid ${border}`, background: card, color: fg }}>
@@ -83,17 +78,9 @@ export default function SearchForm({
         </div>
       </div>
 
-      {/* Radius selector (km) */}
       <label style={{ display: "grid", gap: 6, fontSize: 14, color: sub }}>
         <span>Radius: <strong style={{ color: fg }}>{radius}</strong> km</span>
-        <input
-          type="range"
-          min={1}
-          max={50}
-          step={1}
-          value={radius}
-          onChange={(e) => setRadius(Number(e.target.value))}
-        />
+        <input type="range" min={1} max={50} step={1} value={radius} onChange={(e) => setRadius(Number(e.target.value))} />
       </label>
 
       <button
