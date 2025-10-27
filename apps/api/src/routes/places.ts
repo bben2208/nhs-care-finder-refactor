@@ -1,148 +1,181 @@
-import express from "express";
+// apps/api/src/routes/places.ts
+import { Router } from "express";
 import axios from "axios";
-import seed from "../data/places.seed.json" with { type: "json" };
 
-type LatLon = { lat: number; lon: number };
+const router = Router();
 
-function haversineMeters(a: LatLon, b: LatLon): number {
+// Very small helper
+function toNumber(v: any) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+type Place = {
+  id: string;
+  name: string;
+  type: "gp" | "walk-in" | "utc" | "ae";
+  distanceMeters: number;
+  status: { open: boolean; closesInMins?: number };
+  location: { lat: number; lon: number };
+  address?: string;
+  phone?: string;
+  website?: string;
+  opening: {
+    mon: { open: string; close: string }[];
+    tue: { open: string; close: string }[];
+    wed: { open: string; close: string }[];
+    thu: { open: string; close: string }[];
+    fri: { open: string; close: string }[];
+    sat: { open: string; close: string }[];
+    sun: { open: string; close: string }[];
+  };
+  features?: { xray?: boolean; wheelchair?: boolean; parking?: boolean };
+  waitMinutes?: number;
+};
+
+// dumb opening-hours placeholder
+const EMPTY_OPENING = {
+  mon: [], tue: [], wed: [], thu: [], fri: [], sat: [], sun: [],
+} as Place["opening"];
+
+// map OSM tags to your type
+function mapAmenityToType(a?: string): Place["type"] {
+  switch (a) {
+    case "hospital": return "ae";           // closest match for now
+    case "urgent_care": return "utc";
+    case "clinic": return "walk-in";
+    case "doctors": return "gp";
+    default: return "walk-in";
+  }
+}
+
+// haversine distance in meters
+function distanceMeters(a: {lat:number; lon:number}, b: {lat:number; lon:number}) {
   const R = 6371000;
-  const toRad = (d: number) => (d * Math.PI) / 180;
+  const toRad = (x:number) => x * Math.PI/180;
   const dLat = toRad(b.lat - a.lat);
   const dLon = toRad(b.lon - a.lon);
-  const lat1 = toRad(a.lat);
-  const lat2 = toRad(b.lat);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-  return R * c;
+  const la1 = toRad(a.lat);
+  const la2 = toRad(b.lat);
+  const s =
+    Math.sin(dLat/2)**2 +
+    Math.cos(la1) * Math.cos(la2) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(s));
 }
 
-type Window = { open: string; close: string };
-type Opening = {
-  mon: Window[]; tue: Window[]; wed: Window[];
-  thu: Window[]; fri: Window[]; sat: Window[]; sun: Window[];
-};
-const dayKey = (d: number): keyof Opening =>
-  (["sun", "mon", "tue", "wed", "thu", "fri", "sat"][d] as keyof Opening);
+async function geocodePostcode(postcode: string) {
+  const url = "https://nominatim.openstreetmap.org/search";
+  const { data } = await axios.get(url, {
+    params: { q: postcode, format: "json", addressdetails: 1, limit: 1 },
+    headers: { "User-Agent": "nhs-care-finder/1.0 (demo)" },
+    timeout: 10000,
+  });
+  const hit = Array.isArray(data) ? data[0] : undefined;
+  if (!hit) throw new Error("Postcode not found");
+  return { lat: Number(hit.lat), lon: Number(hit.lon) };
+}
 
-function toMin(t: string) { const [h, m] = t.split(":").map(Number); return h * 60 + m; }
-function isOpenNow(opening: Opening, now = new Date()) {
-  const windows = opening[dayKey(now.getDay())];
-  const nowM = now.getHours() * 60 + now.getMinutes();
-  for (const w of windows) {
-    const s = toMin(w.open), e = toMin(w.close);
-    if (s <= nowM && nowM <= e) return { open: true, closesInMins: e - nowM };
+async function queryOverpass(lat: number, lon: number, radiusKm: number, type?: string) {
+  const radiusM = Math.max(100, Math.min(50000, Math.round(radiusKm * 1000)));
+
+  // Build amenity filter
+  // If `type` provided, narrow the amenity list
+  let amenities = ["hospital", "urgent_care", "clinic", "doctors"];
+  if (type) {
+    const map: Record<string,string[]> = {
+      ae: ["hospital"],
+      utc: ["urgent_care"],
+      "walk-in": ["clinic"],
+      gp: ["doctors"],
+    };
+    amenities = map[type] ?? amenities;
   }
-  return { open: false as const };
-}
 
-/** --- Geocoding helpers --- */
-function normalizePostcode(raw: string): string {
-  // Turn + into space, collapse whitespace, uppercase (keep internal space variant for search)
-  return raw.replace(/\+/g, " ").replace(/\s+/g, " ").trim().toUpperCase();
-}
-function extractOutcode(pc: string): string | null {
-  // e.g. "BN21 4YB" -> "BN21"
-  const m = normalizePostcode(pc).match(/^([A-Z]{1,2}\d[A-Z\d]?)/);
-  return m ? m[1] : null;
-}
-
-async function geocodePostcode(raw: string): Promise<LatLon> {
-  const cleaned = normalizePostcode(raw);
-  const nospace = cleaned.replace(/\s/g, "");
-
-  // 1) Exact full postcode (no space)
-  try {
-    const { data } = await axios.get(
-      `https://api.postcodes.io/postcodes/${encodeURIComponent(nospace)}`,
-      { timeout: 6000 }
+  const overpassQL = `
+    [out:json][timeout:25];
+    (
+      ${amenities.map(a => `node["amenity"="${a}"](around:${radiusM},${lat},${lon});`).join("\n")}
+      ${amenities.map(a => `way["amenity"="${a}"](around:${radiusM},${lat},${lon});`).join("\n")}
+      ${amenities.map(a => `relation["amenity"="${a}"](around:${radiusM},${lat},${lon});`).join("\n")}
     );
-    if (data?.result) return { lat: data.result.latitude, lon: data.result.longitude };
-  } catch {}
+    out center tags;
+  `.trim();
 
-  // 2) Fuzzy search for full postcode (with q)
-  try {
-    const { data } = await axios.get(
-      "https://api.postcodes.io/postcodes",
-      { params: { q: cleaned, limit: 1 }, timeout: 6000 }
-    );
-    const hit = data?.result?.[0];
-    if (hit) return { lat: hit.latitude, lon: hit.longitude };
-  } catch {}
+  const { data } = await axios.post("https://overpass-api.de/api/interpreter", overpassQL, {
+    headers: { "Content-Type": "text/plain", "User-Agent": "nhs-care-finder/1.0 (demo)" },
+    timeout: 25000,
+  });
 
-  // 3) OUTCODE centroid (area like "BN21")
-  try {
-    const out = extractOutcode(cleaned);
-    if (out) {
-      const { data } = await axios.get(
-        `https://api.postcodes.io/outcodes/${encodeURIComponent(out)}`,
-        { timeout: 6000 }
-      );
-      const r = data?.result;
-      if (r?.latitude && r?.longitude) return { lat: r.latitude, lon: r.longitude };
-    }
-  } catch {}
-
-  // 4) OSM fallback (broad search)
-  try {
-    const { data } = await axios.get(
-      "https://nominatim.openstreetmap.org/search",
-      {
-        params: { q: `${cleaned}, UK`, format: "json", limit: 1 },
-        headers: { "User-Agent": "nhs-care-finder (learning project)" },
-        timeout: 8000
-      }
-    );
-    const hit = Array.isArray(data) ? data[0] : null;
-    if (hit?.lat && hit?.lon) return { lat: Number(hit.lat), lon: Number(hit.lon) };
-  } catch {}
-
-  throw new Error(`Postcode not found: ${raw}`);
+  const elements: any[] = data?.elements ?? [];
+  return elements;
 }
-
-/** --- Router --- */
-const router = express.Router();
 
 router.get("/", async (req, res) => {
-  const { postcode, lat, lon, type, radius = "10" } = req.query as Record<string, string>;
   try {
-    let origin: LatLon | null = null;
+    const postcode = (req.query.postcode as string | undefined)?.trim();
+    const latQ = toNumber(req.query.lat);
+    const lonQ = toNumber(req.query.lon);
+    const radiusKm = toNumber(req.query.radius) ?? 10;
+    const type = (req.query.type as string | undefined)?.trim() as Place["type"] | undefined;
 
-    if (postcode) {
-      origin = await geocodePostcode(postcode);
-    } else if (lat && lon) {
-      origin = { lat: Number(lat), lon: Number(lon) };
-    } else {
-      return res.status(400).json({ error: "Provide postcode or lat & lon" });
+    if (!postcode && (latQ == null || lonQ == null)) {
+      return res.status(400).json({ error: "Provide either 'postcode' or both 'lat' and 'lon'." });
     }
 
-    const rMeters = Number(radius) * 1000;
+    // Resolve coordinates
+    const origin = postcode ? await geocodePostcode(postcode) : { lat: latQ!, lon: lonQ! };
 
-    const results = (seed as any[])
-      .filter(p => (type ? p.type === type : true))
-      .map(p => {
-        const distanceMeters = Math.round(haversineMeters(origin!, p.location));
-        const status = isOpenNow(p.opening);
-        return { ...p, distanceMeters, status };
-      })
-      .filter(p => p.distanceMeters <= rMeters)
-      .sort((a, b) => a.distanceMeters - b.distanceMeters);
+    // Fetch real places
+    const osm = await queryOverpass(origin.lat, origin.lon, radiusKm, type);
 
-    res.json({ query: { postcode, lat, lon, type, radius, origin }, count: results.length, results });
-  } catch (e: any) {
-    console.error("Search error:", e?.response?.status, e?.response?.data || e?.message);
-    res.status(400).json({ error: e?.message ?? "Bad request" });
+    const places: Place[] = osm.map((el, i) => {
+      const center = el.type === "node"
+        ? { lat: el.lat, lon: el.lon }
+        : (el.center ?? { lat: origin.lat, lon: origin.lon });
+
+      const name = el.tags?.name || el.tags?.["name:en"] || "Unnamed facility";
+      const amenity = el.tags?.amenity as string | undefined;
+      const pType = mapAmenityToType(amenity);
+
+      // simple address
+      const addr = [
+        el.tags?.["addr:housename"],
+        el.tags?.["addr:housenumber"],
+        el.tags?.["addr:street"],
+        el.tags?.["addr:city"],
+        el.tags?.["addr:postcode"],
+      ].filter(Boolean).join(", ");
+
+      const dist = Math.round(distanceMeters(origin, center));
+
+      return {
+        id: `osm-${el.type}-${el.id}`,
+        name,
+        type: pType,
+        distanceMeters: dist,
+        status: { open: true },          // could be improved by parsing opening_hours
+        location: { lat: center.lat, lon: center.lon },
+        address: addr || undefined,
+        phone: el.tags?.phone || el.tags?.contact_phone || undefined,
+        website: el.tags?.website || el.tags?.contact_website || undefined,
+        opening: EMPTY_OPENING,
+        features: {
+          wheelchair: el.tags?.wheelchair === "yes",
+          parking: Boolean(el.tags?.parking || el.tags?.["parking:lane"] || el.tags?.["amenity:parking"]),
+          xray: undefined,
+        },
+      };
+    })
+    // Filter again by type (in case multiple amenities were requested)
+    .filter(p => !type || p.type === type)
+    // Sort by nearest
+    .sort((a,b) => a.distanceMeters - b.distanceMeters);
+
+    return res.json({ results: places, debug: { postcode, lat: origin.lat, lon: origin.lon, radius: radiusKm, type } });
+  } catch (err: any) {
+    console.error("[/places] error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to fetch places", details: err?.message });
   }
 });
-
-// ✅ Sibling route (NOT nested)
-router.get("/:id", async (req, res) => {
-  const { id } = req.params;
-  const place = (seed as any[]).find(p => p.id === id);
-  if (!place) return res.status(404).json({ error: "Place not found" });
-  res.json(place);
-});
-
 
 export default router;

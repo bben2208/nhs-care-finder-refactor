@@ -21,6 +21,7 @@ export default function ResultList({
     return <p role="alert" aria-live="polite" style={{ color: "crimson", marginTop: 8 }}>{error}</p>;
   }
 
+  // Show skeletons only when loading and nothing loaded yet
   if (loading && results.length === 0) {
     return (
       <ul style={{ listStyle: "none", padding: 0, marginTop: 16, display: "grid", gap: 8 }}>
@@ -31,9 +32,15 @@ export default function ResultList({
     );
   }
 
+  const visible = results.slice(0, 4); // cap at 4
+
+  if (!loading && visible.length === 0) {
+    return <p style={{ marginTop: 12, color: sub }}>No places found in this area.</p>;
+  }
+
   return (
     <ul aria-busy={loading} style={{ listStyle: "none", padding: 0, marginTop: 16, display: "grid", gap: 8 }}>
-      {results.map((r) => (
+      {visible.map((r) => (
         <ResultCard
           key={r.id}
           place={r}

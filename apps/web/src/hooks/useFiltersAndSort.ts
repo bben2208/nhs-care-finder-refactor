@@ -10,6 +10,7 @@ export type Filters = {
   fav: boolean;
 };
 
+/** Filters + sorts the places list efficiently with memoization. */
 export function useFiltersAndSort(
   results: Place[],
   filters: Filters,
@@ -18,12 +19,15 @@ export function useFiltersAndSort(
 ) {
   return useMemo(() => {
     let arr = results.slice();
-    if (filters.open) arr = arr.filter(r => r.status.open);
-    if (filters.wheelchair) arr = arr.filter(r => r.features?.wheelchair);
-    if (filters.parking) arr = arr.filter(r => r.features?.parking);
-    if (filters.xray) arr = arr.filter(r => r.features?.xray);
-    if (filters.fav) arr = arr.filter(r => isFav(r.id));
 
+    // Filters
+    if (filters.open)       arr = arr.filter(r => r.status?.open);
+    if (filters.wheelchair) arr = arr.filter(r => r.features?.wheelchair);
+    if (filters.parking)    arr = arr.filter(r => r.features?.parking);
+    if (filters.xray)       arr = arr.filter(r => r.features?.xray);
+    if (filters.fav)        arr = arr.filter(r => isFav(r.id));
+
+    // Sorting
     arr.sort((a, b) => {
       switch (sortBy) {
         case "open":
@@ -33,10 +37,14 @@ export function useFiltersAndSort(
           return (a.status.closesInMins ?? Infinity) - (b.status.closesInMins ?? Infinity);
         case "wait":
           return (a.waitMinutes ?? Infinity) - (b.waitMinutes ?? Infinity);
+        case "nearest":
         default:
           return a.distanceMeters - b.distanceMeters;
       }
     });
+
     return arr;
   }, [results, filters.open, filters.wheelchair, filters.parking, filters.xray, filters.fav, sortBy, isFav]);
 }
+
+export default useFiltersAndSort;

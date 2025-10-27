@@ -1,3 +1,4 @@
+//usePlacesSearch.ts
 import { useCallback, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { apiGetWithFallback } from "../lib/api";

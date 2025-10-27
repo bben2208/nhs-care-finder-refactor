@@ -1,30 +1,30 @@
 import axios from "axios";
 
-export const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
+// Resolve API base from Vite env or fallback to legacy proxy
+const RAW = (import.meta as any).env?.VITE_API_BASE?.trim?.();
+export const API_BASE: string = RAW && RAW.length > 0 ? RAW.replace(/\/+$/, "") : "/api";
+
 console.info("[CFG] API_BASE =", API_BASE);
 
-const api = axios.create({ baseURL: API_BASE });
+export function buildUrl(path: string, qs?: string): string {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  const q = qs ? (p.includes("?") ? `&${qs}` : `?${qs}`) : "";
+  return `${API_BASE}${p}${q}`;
+}
 
-// Log each request URL
-api.interceptors.request.use((cfg) => {
-  const full = API_BASE + (cfg.url?.startsWith("/") ? cfg.url : `/${cfg.url ?? ""}`);
-  console.info("[HTTP] →", cfg.method?.toUpperCase(), full);
-  return cfg;
-});
+export const api = axios.create({ baseURL: API_BASE });
 
-// Helper with fallback: try `/places`, then `/api/places` if 404
+/** GET with graceful fallback to legacy “/api” prefix */
 export async function apiGetWithFallback(path: string, qs?: string) {
-  const url = qs ? `${path}?${qs}` : path;
+  const url = buildUrl(path, qs);
   try {
-    return await api.get(url);
-  } catch (err: any) {
-    if (err?.response?.status === 404) {
-      const alt = qs ? `/api${path}?${qs}` : `/api${path}`;
-      console.warn("[HTTP] fallback →", alt);
-      return await api.get(alt);
+    return await axios.get(url);
+  } catch (err) {
+    if (API_BASE !== "/api") {
+      const p = path.startsWith("/") ? path : `/${path}`;
+      const legacy = `/api${p}${qs ? `?${qs}` : ""}`;
+      return await axios.get(legacy);
     }
     throw err;
   }
 }
-
-export { api };
